@@ -3,29 +3,57 @@ name: Deploy to AKS
 on:
   push:
     branches:
-      - main
-      - prod  # Change this if your branch is different
+      - main  # Change this if using a different branch
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    
+      # ✅ Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Log in to Azure
+      # ✅ Step 2: Log in to Azure using GitHub Secret
+      - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and push Docker image
+      # ✅ Step 3: Set up Azure CLI (optional but recommended)
+      - name: Set up Azure CLI
+        run: az account show
+
+      # ✅ Step 4: Log in to Azure Container Registry (ACR)
+      - name: Azure Container Registry Login
         run: |
           az acr login --name devopsacr157687
-          docker build -t devopsacr157687.azurecr.io/my-app:latest .
-          docker push devopsacr157687.azurecr.io/my-app:latest
 
+      # ✅ Step 5: Build & Push Docker images (Backend & Frontend)
+      - name: Build & Push Backend Image
+        run: |
+          docker build -t devopsacr157687.azurecr.io/my-backend:${{ github.sha }} ./app/src/backend
+          docker push devopsacr157687.azurecr.io/my-backend:${{ github.sha }}
+
+      - name: Build & Push Frontend Image
+        run: |
+          docker build -t devopsacr157687.azurecr.io/my-frontend:${{ github.sha }} ./app/src/frontend/my-app
+          docker push devopsacr157687.azurecr.io/my-frontend:${{ github.sha }}
+
+      # ✅ Step 6: Set Kubernetes Context
+      - name: Set AKS Context
+        run: az aks get-credentials --resource-group myResourceGroup --name myAKSCluster
+
+      # ✅ Step 7: Deploy to Kubernetes (Backend & Frontend)
       - name: Deploy to AKS
         run: |
-          az aks get-credentials --resource-group myResourceGroup --name myAKSCluster
-          kubectl apply -f kubernetes/deployment.yaml
-          kubectl apply -f kubernetes/service.yaml
+          kubectl set image deployment/my-app my-app=devopsacr157687.azurecr.io/my-backend:${{ github.sha }} --record
+          kubectl set image deployment/my-frontend my-frontend=devopsacr157687.azurecr.io/my-frontend:${{ github.sha }} --record
+
+      # ✅ Step 8: Verify Deployment
+      - name: Verify Pods
+        run: kubectl get pods -o wide
+
+      # ✅ Step 9: Verify Services
+      - name: Verify Services
+        run: kubectl get svc -o wide
