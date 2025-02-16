@@ -1,0 +1,31 @@
+name: Deploy to AKS
+
+on:
+  push:
+    branches:
+      - main
+      - prod  # Change this if your branch is different
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push Docker image
+        run: |
+          az acr login --name devopsacr157687
+          docker build -t devopsacr157687.azurecr.io/my-app:latest .
+          docker push devopsacr157687.azurecr.io/my-app:latest
+
+      - name: Deploy to AKS
+        run: |
+          az aks get-credentials --resource-group myResourceGroup --name myAKSCluster
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/service.yaml
